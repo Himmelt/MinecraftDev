@@ -18,6 +18,7 @@ import kotlin.reflect.KClass
 
 buildscript {
     repositories {
+        maven("https://maven.aliyun.com/repository/public")
         maven("https://dl.bintray.com/jetbrains/intellij-plugin-service")
     }
 }
@@ -58,7 +59,7 @@ configurations {
 }
 
 repositories {
-    mavenCentral()
+    maven("https://maven.aliyun.com/repository/public")
     maven("https://dl.bintray.com/minecraft-dev/maven")
     maven("https://repo.spongepowered.org/maven")
     maven("https://jetbrains.bintray.com/intellij-third-party-dependencies")

@@ -28,6 +28,7 @@ object BukkitModuleType : AbstractModuleType<BukkitModule<BukkitModuleType>>("or
 
     init {
         CommonColors.applyStandardColors(colorMap, BukkitConstants.CHAT_COLOR_CLASS)
+        CommonColors.applyStandardColors(colorMap, BukkitConstants.VIOLET_COLORS)
     }
 
     override val platformType = PlatformType.BUKKIT
