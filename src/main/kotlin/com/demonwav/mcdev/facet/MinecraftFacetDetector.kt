@@ -10,7 +10,6 @@
 
 package com.demonwav.mcdev.facet
 
-import com.demonwav.mcdev.platform.MinecraftModuleType
 import com.demonwav.mcdev.platform.PlatformType
 import com.demonwav.mcdev.platform.sponge.framework.SPONGE_LIBRARY_KIND
 import com.demonwav.mcdev.util.AbstractProjectComponent
@@ -33,12 +32,6 @@ class MinecraftFacetDetector(project: Project) : AbstractProjectComponent(projec
     override fun projectOpened() {
         val manager = StartupManager.getInstance(project)
         val connection = project.messageBus.connect()
-
-        for (module in ModuleManager.getInstance(project).modules) {
-            // This only exists for legacy reasons, hence why we are removing the option, so suppress deprecation
-            @Suppress("DEPRECATION")
-            module.clearOption(MinecraftModuleType.OPTION)
-        }
 
         manager.registerStartupActivity {
             MinecraftModuleRootListener.doCheck(project)
@@ -83,14 +76,22 @@ class MinecraftFacetDetector(project: Project) : AbstractProjectComponent(projec
 
             val facet = facetManager.createFacet(MinecraftFacet.facetType, "Minecraft", configuration, null)
             runWriteTaskLater {
-                val modifiableModel = facetManager.createModifiableModel()
-                modifiableModel.addFacet(facet)
-                modifiableModel.commit()
+                // Only add the new facet if there isn't a Minecraft facet already - double check here since this
+                // task may run much later
+                if (module.isDisposed || facet.isDisposed) {
+                    // Module may be disposed before we run
+                    return@runWriteTaskLater
+                }
+                if (facetManager.getFacetByType(MinecraftFacet.ID) == null) {
+                    val model = facetManager.createModifiableModel()
+                    model.addFacet(facet)
+                    model.commit()
+                }
             }
         }
 
         private fun checkExistingFacet(module: Module, facet: MinecraftFacet) {
-            val platforms = autoDetectTypes(module)
+            val platforms = autoDetectTypes(module).ifEmpty { return }
 
             val types = facet.configuration.state.autoDetectTypes
             types.clear()
@@ -115,13 +116,13 @@ class MinecraftFacetDetector(project: Project) : AbstractProjectComponent(projec
                 .using(context.modulesProvider)
                 .recursively()
                 .librariesOnly()
-                .forEachLibrary { library ->
+                .forEachLibrary forEach@ { library ->
                     MINECRAFT_LIBRARY_KINDS.forEach { kind ->
                         if (presentationManager.isLibraryOfKind(library, context.librariesContainer, setOf(kind))) {
                             platformKinds.add(kind)
                         }
                     }
-                    true
+                    return@forEach true
                 }
 
             context.rootModel
@@ -130,24 +131,24 @@ class MinecraftFacetDetector(project: Project) : AbstractProjectComponent(projec
                 .recursively()
                 .withoutLibraries()
                 .withoutSdk()
-                .forEachModule { m ->
+                .forEachModule forEach@ { m ->
                     if (m.name.startsWith("SpongeAPI")) {
                         // We don't want want to add parent modules in module groups
                         val moduleManager = ModuleManager.getInstance(m.project)
                         val groupPath = moduleManager.getModuleGroupPath(m)
                         if (groupPath == null) {
                             platformKinds.add(SPONGE_LIBRARY_KIND)
-                            return@forEachModule true
+                            return@forEach true
                         }
 
-                        val name = groupPath.lastOrNull() ?: return@forEachModule true
+                        val name = groupPath.lastOrNull() ?: return@forEach true
                         if (m.name == name) {
-                            return@forEachModule true
+                            return@forEach true
                         }
 
                         platformKinds.add(SPONGE_LIBRARY_KIND)
                     }
-                    true
+                    return@forEach true
                 }
 
             return platformKinds.mapNotNull { kind -> PlatformType.fromLibraryKind(kind) }.toSet()

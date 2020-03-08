@@ -8,13 +8,11 @@
  * MIT License
  */
 
-import net.minecrell.gradle.licenser.header.HeaderFormat
-import net.minecrell.gradle.licenser.header.HeaderFormatRegistry
 import net.minecrell.gradle.licenser.header.HeaderStyle
 import org.gradle.internal.jvm.Jvm
 import org.jetbrains.intellij.tasks.PublishTask
+import org.jetbrains.intellij.tasks.RunIdeTask
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-import kotlin.reflect.KClass
 
 buildscript {
     repositories {
@@ -23,38 +21,41 @@ buildscript {
 }
 
 plugins {
-    id("org.jetbrains.kotlin.jvm") version "1.3.0" // kept in sync with IntelliJ's bundled dep
+    kotlin("jvm") version "1.3.11" // kept in sync with IntelliJ's bundled dep
     groovy
     idea
-    id("org.jetbrains.intellij") version "0.3.12"
+    id("org.jetbrains.intellij") version "0.4.8"
     id("net.minecrell.licenser") version "0.4.1"
 }
 
-defaultTasks("build")
+val coroutineVersion = "1.0.1" // Coroutine version also kept in sync with IntelliJ's bundled dep
 
-val CI = System.getenv("CI") != null
+defaultTasks("build")
 
 val ideaVersion: String by project
 val downloadIdeaSources: String by project
 
 // for publishing nightlies
-val repoUsername: String by project
-val repoPassword: String by project
+val repoToken: String by project
 val repoChannel: String by project
 
 val compileKotlin by tasks.existing
 val processResources by tasks.existing<AbstractCopyTask>()
 val test by tasks.existing<Test>()
-val runIde by tasks.existing<JavaExec>()
+val runIde by tasks.existing<RunIdeTask>()
 val publishPlugin by tasks.existing<PublishTask>()
 val clean by tasks.existing<Delete>()
 
-configurations {
-    register("gradle-tooling-extension") { extendsFrom(configurations["idea"]) }
-    register("jflex")
-    register("jflex-skeleton")
-    register("grammar-kit")
-    register("testLibs") { isTransitive = false }
+// configurations
+val idea by configurations
+val gradleToolingExtension by configurations.creating {
+    extendsFrom(idea)
+}
+val jflex by configurations.creating
+val jflexSkeleton by configurations.creating
+val grammarKit by configurations.creating
+val testLibs by configurations.creating {
+    isTransitive = false
 }
 
 repositories {
@@ -69,14 +70,23 @@ java {
     targetCompatibility = JavaVersion.VERSION_1_8
 }
 
-val gradleToolingExtension = sourceSets.create("gradle-tooling-extension") {
-    configurations.named<Configuration>(compileOnlyConfigurationName) {
-        extendsFrom(configurations["gradle-tooling-extension"])
+val gradleToolingExtensionSourceSet = sourceSets.create("gradle-tooling-extension") {
+    configurations.named(compileOnlyConfigurationName) {
+        extendsFrom(gradleToolingExtension)
     }
 }
-val gradleToolingExtensionJar = tasks.register<Jar>(gradleToolingExtension.jarTaskName) {
-    from(gradleToolingExtension.output)
-    classifier = "gradle-tooling-extension"
+val gradleToolingExtensionJar = tasks.register<Jar>(gradleToolingExtensionSourceSet.jarTaskName) {
+    from(gradleToolingExtensionSourceSet.output)
+    archiveClassifier.set("gradle-tooling-extension")
+}
+
+// Sources aren't provided through the gradle intellij plugin for bundled libs, use compileOnly to attach them
+// but not include them in the output artifact
+//
+// Kept in a separate block for readability
+dependencies {
+    compileOnly(kotlin("stdlib-jdk8"))
+    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutineVersion")
 }
 
 dependencies {
@@ -85,20 +95,20 @@ dependencies {
 
     compile(files(gradleToolingExtensionJar))
 
-    // gradle-intellij-plugin doesn't attach sources properly for Kotlin unless it's manually defined here
-    // compileOnly since it's only here for reference
-    compileOnly(kotlin("stdlib-jdk8"))
+    compile("org.jetbrains.kotlinx:kotlinx-coroutines-swing:$coroutineVersion") {
+        isTransitive = false
+    }
 
-    "jflex"("org.jetbrains.idea:jflex:1.7.0-b7f882a")
-    "jflex-skeleton"("org.jetbrains.idea:jflex:1.7.0-c1fdf11:idea@skeleton")
-    "grammar-kit"("org.jetbrains.idea:grammar-kit:1.5.1")
+    jflex("org.jetbrains.idea:jflex:1.7.0-b7f882a")
+    jflexSkeleton("org.jetbrains.idea:jflex:1.7.0-c1fdf11:idea@skeleton")
+    grammarKit("org.jetbrains.idea:grammar-kit:1.5.1")
 
-    "testLibs"("org.jetbrains.idea:mockJDK:1.7-4d76c50")
-    "testLibs"("org.spongepowered:mixin:0.7-SNAPSHOT:thin")
+    testLibs("org.jetbrains.idea:mockJDK:1.7-4d76c50")
+    testLibs("org.spongepowered:mixin:0.7-SNAPSHOT:thin")
 
     // For non-SNAPSHOT versions (unless Jetbrains fixes this...) find the version with:
-    // intellij.ideaDependency.buildNumber.substring(intellij.type.length + 1)
-    "gradle-tooling-extension"("com.jetbrains.intellij.gradle:gradle-tooling-extension:191-SNAPSHOT")
+    // println(intellij.ideaDependency.buildNumber.substring(intellij.type.length + 1))
+    gradleToolingExtension("com.jetbrains.intellij.gradle:gradle-tooling-extension:191.6183.87")
 }
 
 intellij {
@@ -112,7 +122,7 @@ intellij {
     pluginName = "Minecraft Development"
     updateSinceUntilBuild = true
 
-    downloadSources = !CI && downloadIdeaSources.toBoolean()
+    downloadSources = downloadIdeaSources.toBoolean()
 
     sandboxDirectory = project.rootDir.canonicalPath + "/.sandbox"
 }
@@ -121,8 +131,7 @@ publishPlugin {
     if (properties["publish"] != null) {
         project.version = "${project.version}-${properties["buildNumber"]}"
 
-        username(repoUsername)
-        password(repoPassword)
+        token(repoToken)
         channels(repoChannel)
     }
 }
@@ -149,9 +158,9 @@ processResources {
 }
 
 test {
-    dependsOn(configurations["testLibs"])
+    dependsOn(testLibs)
     doFirst {
-        configurations["testLibs"].resolvedConfiguration.resolvedArtifacts.forEach {
+        testLibs.resolvedConfiguration.resolvedArtifacts.forEach {
             systemProperty("testLibs.${it.name}", it.file.absolutePath)
         }
     }
@@ -204,12 +213,12 @@ fun generateLexer(name: String, flex: String, pack: String) = tasks.register<Jav
     val dst = "gen/com/demonwav/mcdev/$pack"
     val output = "$dst/$flex.java"
 
-    classpath = configurations["jflex"]
+    classpath = jflex
     main = "jflex.Main"
 
     doFirst {
         args(
-            "--skel", configurations["jflex-skeleton"].singleFile.absolutePath,
+            "--skel", jflexSkeleton.singleFile.absolutePath,
             "-d", dst,
             src
         )
@@ -218,7 +227,7 @@ fun generateLexer(name: String, flex: String, pack: String) = tasks.register<Jav
         delete(output)
     }
 
-    inputs.files(src, configurations["jflex-skeleton"])
+    inputs.files(src, jflexSkeleton)
     outputs.file(output)
 }
 
@@ -233,7 +242,7 @@ fun generatePsiAndParser(name: String, bnf: String, pack: String) = tasks.regist
         delete(psiDir, parserDir)
     }
 
-    classpath = configurations["grammar-kit"]
+    classpath = grammarKit
     main = "org.intellij.grammar.Main"
 
     args(dstRoot, src)
@@ -256,7 +265,7 @@ val generateI18nPsiAndParser = generatePsiAndParser("generateI18nPsiAndParser", 
 
 val generateI18nTemplateLexer = generateLexer("generateI18nTemplateLexer", "I18nTemplateLexer", "i18n/lang/gen/")
 
-val generate = tasks.register("generate") {
+val generate by tasks.registering {
     group = "minecraft"
     description = "Generates sources needed to compile the plugin."
     dependsOn(
@@ -271,7 +280,7 @@ val generate = tasks.register("generate") {
     outputs.dir("gen")
 }
 
-sourceSets.named<SourceSet>("main") { java.srcDir(generate) }
+sourceSets.named("main") { java.srcDir(generate) }
 
 // Remove gen directory on clean
 clean { delete(generate) }

@@ -13,8 +13,7 @@ package com.demonwav.mcdev.creator
 import com.demonwav.mcdev.platform.PlatformType
 import com.demonwav.mcdev.util.ProxyHttpConnectionFactory
 import com.demonwav.mcdev.util.fromJson
-import com.demonwav.mcdev.util.gson
-import org.jetbrains.concurrency.runAsync
+import com.google.gson.Gson
 import java.io.IOException
 import java.util.Arrays
 import java.util.Objects
@@ -23,15 +22,15 @@ import javax.swing.JComboBox
 private const val cloudflareBaseUrl = "https://minecraftdev.org/versions/"
 private const val githubBaseUrl = "https://raw.githubusercontent.com/minecraft-dev/minecraftdev.org/master/versions/"
 
-fun getVersionSelector(type: PlatformType) = runAsync {
+fun getVersionSelector(type: PlatformType): PlatformVersion {
     val versionJson = type.versionJson ?: throw UnsupportedOperationException("Incorrect platform type: $type")
 
-    try {
+    return try {
         // attempt cloudflare
-        return@runAsync doCall(cloudflareBaseUrl + versionJson)
+        doCall(cloudflareBaseUrl + versionJson)
     } catch (e: IOException) {
         // if that fails, attempt github
-        return@runAsync doCall(githubBaseUrl + versionJson)
+        doCall(githubBaseUrl + versionJson)
     }
 }
 
@@ -44,7 +43,7 @@ private fun doCall(urlText: String): PlatformVersion {
     )
 
     val text = connection.inputStream.use { stream -> stream.reader().use { it.readText() } }
-    return gson.fromJson(text)
+    return Gson().fromJson(text)
 }
 
 data class PlatformVersion(var versions: Array<String>, var selectedIndex: Int) {

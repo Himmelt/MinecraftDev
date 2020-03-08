@@ -12,16 +12,23 @@ package com.demonwav.mcdev.creator
 
 import com.demonwav.mcdev.asset.PlatformAssets
 import com.demonwav.mcdev.platform.PlatformType
+import com.demonwav.mcdev.platform.ProjectConfiguration
 import com.demonwav.mcdev.platform.forge.ForgeProjectConfiguration
 import com.demonwav.mcdev.platform.forge.version.ForgeVersion
 import com.demonwav.mcdev.platform.hybrid.SpongeForgeProjectConfiguration
 import com.demonwav.mcdev.platform.mcp.version.McpVersion
 import com.demonwav.mcdev.platform.mcp.version.McpVersionEntry
 import com.demonwav.mcdev.platform.sponge.SpongeVersion
-import com.demonwav.mcdev.util.invokeLaterAny
+import com.demonwav.mcdev.util.firstOfType
 import com.intellij.util.ui.UIUtil
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.swing.Swing
 import org.apache.commons.lang.WordUtils
-import org.jetbrains.concurrency.runAsync
 import java.awt.event.ActionListener
 import javax.swing.DefaultComboBoxModel
 import javax.swing.JComboBox
@@ -30,7 +37,6 @@ import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.JProgressBar
 import javax.swing.JTextField
-import javax.swing.SwingWorker
 
 class ForgeProjectSettingsWizard(private val creator: MinecraftProjectCreator) : MinecraftModuleWizardStep() {
 
@@ -52,69 +58,66 @@ class ForgeProjectSettingsWizard(private val creator: MinecraftProjectCreator) :
     private lateinit var mcpWarning: JLabel
     private lateinit var errorLabel: JLabel
 
-    private var settings: ForgeProjectConfiguration? = null
-    private var isSpongeForge: Boolean? = null
+    private var config: ForgeProjectConfiguration? = null
 
-    private var spongeVersion: SpongeVersion? = null
-    private var mcpVersion: McpVersion? = null
-    private var forgeVersion: ForgeVersion? = null
+    private data class ForgeVersions(
+        var mcpVersion: McpVersion,
+        var forgeVersion: ForgeVersion,
+        var spongeVersion: SpongeVersion
+    )
+
+    private var versions: ForgeVersions? = null
+
+    private var currentJob: Job? = null
+
+    private var wasSpongeForge: Boolean? = null
 
     private val mcpBoxActionListener = ActionListener {
         mcpWarning.isVisible = (mcpVersionBox.selectedItem as? McpVersionEntry)?.isRed == true
     }
 
-    private val minecraftBoxActionListener = ActionListener {
-        val tempVersion = version
-        runAsync {
-            getData(tempVersion)
-        }.onSuccess { data ->
-            invokeLaterAny {
-                mcVersionUpdate(data)
-            }
+    private val minecraftBoxActionListener: ActionListener = ActionListener {
+        CoroutineScope(Dispatchers.Swing).launch {
+            updateForm()
         }
     }
-
-    private var apiWorker = ForgeWorker(null)
 
     init {
         mcpWarning.isVisible = false
     }
 
-    override fun getComponent(): JComponent? {
-        settings = creator.settings[PlatformType.FORGE] as? ForgeProjectConfiguration
-        if (settings == null) {
-            return null
-        }
-
-        modNameField.text = WordUtils.capitalize(creator.artifactId.replace('-', ' '))
-        modVersionField.text = creator.version
-
-        if (settings != null && !settings!!.isFirst) {
-            modNameField.isEditable = false
-            modVersionField.isEditable = false
-        }
-
-        mainClassField.text = this.creator.groupId.replace("-", "").toLowerCase() + "." +
-            this.creator.artifactId.replace("-", "").toLowerCase() + "." +
-            WordUtils.capitalize(this.creator.artifactId.replace('-', ' ')).replace(" ", "")
-
-        if (creator.settings.size > 1) {
-            mainClassField.text = mainClassField.text + PlatformType.FORGE.normalName
-        }
-
-        loadingBar.isIndeterminate = true
-
-        apiWorker.execute()
-
+    override fun getComponent(): JComponent {
         return panel
     }
 
     override fun updateStep() {
-        if (settings is SpongeForgeProjectConfiguration) {
+        config = creator.configs.firstOfType()
+
+        val buildSystem = creator.buildSystem ?: return
+
+        modNameField.text = WordUtils.capitalize(buildSystem.artifactId.replace('-', ' '))
+        modVersionField.text = buildSystem.version
+
+        val conf = config ?: return
+
+        if (creator.configs.indexOf(conf) != 0) {
+            modNameField.isEditable = false
+            modVersionField.isEditable = false
+        }
+
+        mainClassField.text = buildSystem.groupId.replace("-", "").toLowerCase() + "." +
+            buildSystem.artifactId.replace("-", "").toLowerCase() + "." +
+            WordUtils.capitalize(buildSystem.artifactId.replace('-', ' ')).replace(" ", "")
+
+        if (creator.configs.size > 1) {
+            mainClassField.text = mainClassField.text + PlatformType.FORGE.normalName
+        }
+
+        if (conf is SpongeForgeProjectConfiguration) {
             if (UIUtil.isUnderDarcula()) {
                 title.icon = PlatformAssets.SPONGE_FORGE_ICON_2X_DARK
             } else {
-                title.icon = PlatformAssets.SPONGE_ICON_2X_DARK
+                title.icon = PlatformAssets.SPONGE_FORGE_ICON_2X
             }
             title.text = "<html><font size=\"5\">SpongeForge Settings</font></html>"
 
@@ -126,21 +129,24 @@ class ForgeProjectSettingsWizard(private val creator: MinecraftProjectCreator) :
             minecraftVersionLabel.text = "Minecraft Version"
         }
 
-        if ((forgeVersion == null || mcpVersion == null || spongeVersion == null) && (apiWorker.isCancelled || apiWorker.isDone)) {
-            // A SwingWorker will only run once, so we need to create a new instance
-            apiWorker = ForgeWorker(version)
-            apiWorker.execute()
-        } else if (forgeVersion != null && mcpVersion != null && spongeVersion != null) {
-            // always make sure versions are reset in case of a state change
-            val tempVersion = version
-            runAsync {
-                getData(tempVersion)
-            }.onSuccess { data ->
-                invokeLaterAny {
-                    update(data)
-                }
-            }
+        if (wasSpongeForge != null && wasSpongeForge != conf is SpongeForgeProjectConfiguration) {
+            // Our state has changed, always reload
+            currentJob?.cancel()
+            // if we do cancel a job it may mark the it as an error
+            errorLabel.isVisible = false
+            minecraftVersionBox.removeAllItems()
+            currentJob = updateVersions()
+
+            // Mark it for later
+            wasSpongeForge = conf is SpongeForgeProjectConfiguration
+            return
         }
+
+        wasSpongeForge = conf is SpongeForgeProjectConfiguration
+        if (versions != null || currentJob?.isActive == true) {
+            return
+        }
+        currentJob = updateVersions()
     }
 
     private fun setForgeVersion(data: Data) {
@@ -150,8 +156,8 @@ class ForgeProjectSettingsWizard(private val creator: MinecraftProjectCreator) :
 
     private val version: String?
         get() {
-            return if (isSpongeForge == true || (isSpongeForge == null && settings is SpongeForgeProjectConfiguration)) {
-                spongeVersion?.let { it.versions[minecraftVersionBox.selectedItem as? String] }
+            return if (config is SpongeForgeProjectConfiguration) {
+                versions?.spongeVersion?.let { it.versions[minecraftVersionBox.selectedItem as? String] }
             } else {
                 minecraftVersionBox.selectedItem as? String
             }
@@ -162,41 +168,41 @@ class ForgeProjectSettingsWizard(private val creator: MinecraftProjectCreator) :
     }
 
     override fun isStepVisible(): Boolean {
-        settings = creator.settings[PlatformType.FORGE] as? ForgeProjectConfiguration
-        return settings != null
+        return creator.configs.any { it is ForgeProjectConfiguration }
     }
 
     override fun onStepLeaving() {
-        if (loadingBar.isVisible || errorLabel.isVisible) {
+        currentJob?.let { job ->
             // we're in a cancel state
-            apiWorker.cancel(true)
+            job.cancel()
             return
         }
 
-        settings!!.apply {
-            pluginName = modNameField.text
-            pluginVersion = modVersionField.text
-            mainClass = mainClassField.text
-
-            setAuthors(authorsField.text)
-            setDependencies(dependField.text)
-            description = descriptionField.text
+        val conf = config ?: return
+        conf.base = ProjectConfiguration.BaseConfigs(
+            pluginName = modNameField.text,
+            pluginVersion = modVersionField.text,
+            mainClass = mainClassField.text,
+            description = descriptionField.text,
             website = websiteField.text
-            updateUrl = updateUrlField.text
+        )
 
-            mcpVersion = (mcpVersionBox.selectedItem as McpVersionEntry).text
-        }
+        conf.setAuthors(authorsField.text)
+        conf.setDependencies(dependField.text)
+        conf.updateUrl = updateUrlField.text
 
-        (settings as? SpongeForgeProjectConfiguration)?.let { settings ->
+        conf.mcpVersion = (mcpVersionBox.selectedItem as McpVersionEntry).text
+
+        (conf as? SpongeForgeProjectConfiguration)?.let { settings ->
             settings.spongeApiVersion = minecraftVersionBox.selectedItem as String
         }
 
-        // If an error occurs while fetching the API, this may prevent the user from closing the dialog.
-        val fullVersion = forgeVersion?.getFullVersion(forgeVersionBox.selectedItem as String)
-        if (fullVersion != null) {
-            settings!!.forgeVersion = fullVersion
+        (forgeVersionBox.selectedItem as? String)?.let { version ->
+            val forgeVersion = versions?.forgeVersion ?: return@let
+            conf.forgeVersion = forgeVersion.versions.first { it.endsWith(version) }
         }
-        settings!!.mcVersion = version!!
+
+        conf.mcVersion = version ?: ""
     }
 
     fun error() {
@@ -206,84 +212,6 @@ class ForgeProjectSettingsWizard(private val creator: MinecraftProjectCreator) :
     }
 
     override fun updateDataModel() {}
-
-    private fun getData(version: String?): Data {
-        val recommended = forgeVersion!!.getRecommended(mcpVersion!!.versions)
-
-        var index = forgeVersion!!.sortedMcVersions.indexOf(recommended)
-        if (index == -1) {
-            index = 0
-        }
-
-        var finalVersion = version ?: if (settings !is SpongeForgeProjectConfiguration) {
-            forgeVersion!!.sortedMcVersions[index]
-        } else {
-            spongeVersion!!.versions.values.toTypedArray()[spongeVersion!!.selectedIndex]
-        }
-
-        if (settings !is SpongeForgeProjectConfiguration) {
-            index = forgeVersion!!.sortedMcVersions.indexOf(finalVersion)
-        } else {
-            if (spongeVersion!!.versions.containsValue(finalVersion)) {
-                index = -1
-                var i = 0
-                for ((_, value) in spongeVersion!!.versions) {
-                    i++
-                    if (value == finalVersion) {
-                        index = i
-                        break
-                    }
-                }
-            } else {
-                finalVersion = spongeVersion!!.versions.values.toTypedArray()[spongeVersion!!.selectedIndex]
-                index = forgeVersion!!.sortedMcVersions.indexOf(finalVersion)
-            }
-        }
-
-        val mcpVersionList = mcpVersion!!.getMcpVersionList(finalVersion)
-        val forgeVersions = forgeVersion!!.getForgeVersions(finalVersion).sortedWith(Comparator.reverseOrder())
-
-        var forgeIndex = 0
-        val promo = forgeVersion!!.getPromo(finalVersion)
-        if (promo != null) {
-            for (i in 0 until forgeVersions.size) {
-                try {
-                    if (forgeVersions[i].endsWith(promo.toInt().toString())) {
-                        forgeIndex = i
-                        break
-                    }
-                } catch (ignored: NumberFormatException) {}
-            }
-        }
-
-        return Data(index, mcpVersionList, forgeVersions, forgeIndex)
-    }
-
-    private fun update(data: Data) {
-        if (spongeVersion == null || mcpVersion == null || forgeVersion == null) {
-            error()
-            return
-        }
-
-        minecraftVersionBox.removeActionListener(minecraftBoxActionListener)
-        minecraftVersionBox.removeAllItems()
-
-        if (settings !is SpongeForgeProjectConfiguration) {
-            forgeVersion?.sortedMcVersions?.forEach { minecraftVersionBox.addItem(it) }
-            minecraftVersionBox.setSelectedIndex(data.mcSelectedIndex)
-        } else {
-            spongeVersion!!.set(minecraftVersionBox)
-        }
-        minecraftVersionBox.addActionListener(minecraftBoxActionListener)
-
-        mcVersionUpdate(data)
-
-        // if we come back to this step we need to remember our "past" state (it may change)
-        isSpongeForge = settings is SpongeForgeProjectConfiguration
-
-        loadingBar.isIndeterminate = false
-        loadingBar.isVisible = false
-    }
 
     private fun mcVersionUpdate(data: Data) {
         mcpVersionBox.removeActionListener(mcpBoxActionListener)
@@ -295,22 +223,109 @@ class ForgeProjectSettingsWizard(private val creator: MinecraftProjectCreator) :
         setForgeVersion(data)
     }
 
-    private inner class ForgeWorker(val version: String?) : SwingWorker<Data, Any>() {
-        override fun doInBackground(): Data {
-            spongeVersion = SpongeVersion.downloadData()
-            mcpVersion = McpVersion.downloadData()
-            forgeVersion = ForgeVersion.downloadData()
-            return getData(version)
-        }
+    private fun updateVersions() = CoroutineScope(Dispatchers.Swing).launch {
+        loadingBar.isIndeterminate = true
+        loadingBar.isVisible = true
 
-        public override fun done() {
-            if (spongeVersion == null || mcpVersion == null || forgeVersion == null) {
-                error()
-                return
+        try {
+            downloadVersions()
+            val data = updateForm()
+            if (data != null) {
+                updateMcForm(data)
             }
-
-            update(get())
+        } catch (e: Exception) {
+            error()
         }
+
+        loadingBar.isIndeterminate = false
+        loadingBar.isVisible = false
+
+        currentJob = null
+    }
+
+    private suspend fun downloadVersions() = coroutineScope {
+        val mcpVersionJob = async(Dispatchers.IO) { McpVersion.downloadData() }
+        val forgeVersionJob = async(Dispatchers.IO) { ForgeVersion.downloadData() }
+        val spongeVersionJob = async(Dispatchers.IO) { SpongeVersion.downloadData() }
+
+        versions = ForgeVersions(
+            mcpVersionJob.await() ?: return@coroutineScope,
+            forgeVersionJob.await() ?: return@coroutineScope,
+            spongeVersionJob.await() ?: return@coroutineScope
+        )
+    }
+
+    private suspend fun updateForm(): Data? = coroutineScope {
+        val vers = versions ?: return@coroutineScope null
+
+        val finalVersion = when {
+            version != null -> {
+                // selected version
+                version ?: return@coroutineScope null
+            }
+            config !is SpongeForgeProjectConfiguration -> {
+                // Normal Forge
+                vers.forgeVersion.sortedMcVersions.firstOrNull() ?: return@coroutineScope null
+            }
+            else -> {
+                // Sponge Forge
+                val spongeVersion = vers.spongeVersion
+                val versionString = spongeVersion.versions.values.toTypedArray()[spongeVersion.selectedIndex]
+                vers.forgeVersion.sortedMcVersions.first { it == versionString }
+            }
+        }
+
+        val mcIndex = when {
+            config is SpongeForgeProjectConfiguration && vers.spongeVersion.versions.containsValue(finalVersion) -> {
+                var i = 0
+                for ((_, value) in vers.spongeVersion.versions) {
+                    i++
+                    if (value == finalVersion) {
+                        break
+                    }
+                }
+                i
+            }
+            else -> {
+                0
+            }
+        }
+
+        val mcpVersionListJob = async(Dispatchers.IO) { vers.mcpVersion.getMcpVersionList(finalVersion) }
+        val forgeVersionsJob = async(Dispatchers.IO) {
+            val list = vers.forgeVersion.getForgeVersions(finalVersion)
+            list.sortDescending()
+            for (i in 0 until list.size) {
+                list[i] = list[i].substring(list[i].indexOf('-') + 1)
+            }
+            return@async list
+        }
+
+        val mcpVersionList = mcpVersionListJob.await()
+        val forgeVersions = forgeVersionsJob.await()
+
+        val forgeIndex = 0
+
+        val data = Data(mcIndex, mcpVersionList, forgeVersions, forgeIndex)
+
+        mcVersionUpdate(data)
+
+        return@coroutineScope data
+    }
+
+    private fun updateMcForm(data: Data) {
+        val vers = versions ?: return
+
+        minecraftVersionBox.removeActionListener(minecraftBoxActionListener)
+        minecraftVersionBox.removeAllItems()
+
+        if (config !is SpongeForgeProjectConfiguration) {
+            vers.forgeVersion.sortedMcVersions.forEach { minecraftVersionBox.addItem(it) }
+            minecraftVersionBox.setSelectedIndex(data.mcSelectedIndex)
+        } else {
+            vers.spongeVersion.set(minecraftVersionBox)
+        }
+        minecraftVersionBox.addActionListener(minecraftBoxActionListener)
     }
 
     private data class Data(

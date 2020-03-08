@@ -22,7 +22,6 @@ import com.intellij.openapi.externalSystem.model.ProjectKeys
 import com.intellij.openapi.externalSystem.model.project.ProjectData
 import com.intellij.openapi.externalSystem.service.project.IdeModifiableModelsProvider
 import com.intellij.openapi.externalSystem.service.project.manage.AbstractProjectDataService
-import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
@@ -62,26 +61,24 @@ class ForgeRunConfigDataService : AbstractProjectDataService<ProjectData, Projec
         }
 
         val size = sizeText.toIntOrNull() ?: return
-        val rootModule = ModuleManager.getInstance(project).findModuleByName(moduleName) ?: return
 
         val moduleMap = modelsProvider.modules.associateBy { it.name }
 
+        val rootModule = moduleMap[projectData.group] ?: moduleMap[projectData.group + "." + moduleName] ?: return
+        val module = moduleMap[rootModule.name + "-forge"] ?: rootModule
+
         invokeLater {
             val mainModule = if (size == 1) {
-                moduleMap[rootModule.name + "_main"]
+                moduleMap[module.name + "_main"] ?: moduleMap[module.name + ".main"]
             } else {
-                moduleMap[rootModule.name + "-forge_main"]
+                moduleMap[module.name + "-forge_main"] ?: moduleMap[module.name + "-forge.main"]
             }
-            val forgeModule = moduleMap[rootModule.name + "-forge"]
 
             val runManager = RunManager.getInstance(project)
             val factory = ApplicationConfigurationType.getInstance().configurationFactories.first()
 
             // Client run config
-            val clientSettings = runManager.createConfiguration(
-                (forgeModule ?: rootModule).name + " run client",
-                factory
-            )
+            val clientSettings = runManager.createConfiguration(module.name + " run client", factory)
             val runClientConfiguration = clientSettings.configuration as ApplicationConfiguration
             runClientConfiguration.isAllowRunningInParallel = false
 
@@ -94,9 +91,9 @@ class ForgeRunConfigDataService : AbstractProjectDataService<ProjectData, Projec
             runClientConfiguration.mainClassName = "GradleStart"
 
             if (size == 1) {
-                runClientConfiguration.setModule(mainModule ?: rootModule)
+                runClientConfiguration.setModule(mainModule ?: module)
             } else {
-                runClientConfiguration.setModule(mainModule ?: forgeModule ?: rootModule)
+                runClientConfiguration.setModule(mainModule ?: module)
             }
             clientSettings.isActivateToolWindowBeforeRun = true
 
@@ -104,10 +101,7 @@ class ForgeRunConfigDataService : AbstractProjectDataService<ProjectData, Projec
             runManager.selectedConfiguration = clientSettings
 
             // Server run config
-            val serverSettings = runManager.createConfiguration(
-                (forgeModule ?: rootModule).name + " run server",
-                factory
-            )
+            val serverSettings = runManager.createConfiguration(module.name + " run server", factory)
             val runServerConfiguration = serverSettings.configuration as ApplicationConfiguration
             runServerConfiguration.isAllowRunningInParallel = false
 
@@ -116,9 +110,9 @@ class ForgeRunConfigDataService : AbstractProjectDataService<ProjectData, Projec
             runServerConfiguration.workingDirectory = project.basePath + File.separator + "run"
 
             if (size == 1) {
-                runServerConfiguration.setModule(mainModule ?: rootModule)
+                runServerConfiguration.setModule(mainModule ?: module)
             } else {
-                runServerConfiguration.setModule(mainModule ?: forgeModule ?: rootModule)
+                runServerConfiguration.setModule(mainModule ?: module)
             }
 
             serverSettings.isActivateToolWindowBeforeRun = true

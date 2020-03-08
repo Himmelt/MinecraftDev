@@ -17,8 +17,8 @@ import com.intellij.psi.codeStyle.CodeStyleSettings
 import com.intellij.psi.codeStyle.CodeStyleSettingsProvider
 
 class NbttCodeStyleSettingsProvider : CodeStyleSettingsProvider() {
-    override fun createSettingsPage(settings: CodeStyleSettings, originalSettings: CodeStyleSettings) =
-        object : CodeStyleAbstractConfigurable(settings, originalSettings, configurableDisplayName) {
+    override fun createConfigurable(settings: CodeStyleSettings, modelSettings: CodeStyleSettings) =
+        object : CodeStyleAbstractConfigurable(settings, modelSettings, configurableDisplayName) {
             override fun createPanel(settings: CodeStyleSettings) = NbttCodeStyleMainPanel(currentSettings, settings)
             override fun getHelpTopic(): String? = null
         }

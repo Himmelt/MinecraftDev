@@ -22,15 +22,10 @@ import com.demonwav.mcdev.platform.forge.util.ForgeConstants
 import com.demonwav.mcdev.util.extendsOrImplements
 import com.demonwav.mcdev.util.nullable
 import com.demonwav.mcdev.util.runWriteTaskLater
+import com.demonwav.mcdev.util.waitForAllSmart
 import com.intellij.json.JsonFileType
-import com.intellij.openapi.application.runReadAction
-import com.intellij.openapi.fileTypes.FileNameMatcher
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileTypes.FileTypeManager
-import com.intellij.openapi.progress.DumbProgressIndicator
-import com.intellij.openapi.progress.ProgressIndicator
-import com.intellij.openapi.progress.ProgressManager
-import com.intellij.openapi.progress.Task
-import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.DumbService
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiClass
@@ -54,34 +49,36 @@ class ForgeModule internal constructor(facet: MinecraftFacet) : AbstractModule(f
     override val icon = PlatformAssets.FORGE_ICON
 
     override fun init() {
-        runWriteTaskLater {
-            FileTypeManager.getInstance().associate(JsonFileType.INSTANCE, object : FileNameMatcher {
-                override fun accept(fileName: String) = fileName == ForgeConstants.MCMOD_INFO
-                override fun getPresentableString() = ForgeConstants.MCMOD_INFO
-            })
-        }
+        ApplicationManager.getApplication().executeOnPooledThread {
+            waitForAllSmart()
+            // Set mcmod.info icon
+            runWriteTaskLater {
+                FileTypeManager.getInstance().associatePattern(JsonFileType.INSTANCE, ForgeConstants.MCMOD_INFO)
+            }
 
-        DumbService.getInstance(project).runWhenSmart {
-            ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Indexing @SidedProxy", true, null) {
-                override fun run(indicator: ProgressIndicator) {
-                    runReadAction {
-                        indicator.isIndeterminate = true
-                        val scope = GlobalSearchScope.projectScope(myProject)
-                        val sidedProxy = JavaPsiFacade.getInstance(myProject)
-                            .findClass(ForgeConstants.SIDED_PROXY_ANNOTATION, scope) ?: return@runReadAction
-                        val annotatedFields = AnnotatedElementsSearch.searchPsiFields(sidedProxy, scope).findAll()
-
-                        indicator.isIndeterminate = false
-                        var index = 0.0
-
-                        for (field in annotatedFields) {
-                            SidedProxyAnnotator.check(field)
-                            index++
-                            indicator.fraction = index / annotatedFields.size
-                        }
-                    }
+            // Index @SideOnly
+            val service = DumbService.getInstance(project)
+            service.runReadActionInSmartMode runSmart@ {
+                if (service.isDumb || project.isDisposed) {
+                    return@runSmart
                 }
-            })
+
+                val scope = GlobalSearchScope.projectScope(project)
+                val sidedProxy = JavaPsiFacade.getInstance(project)
+                    .findClass(ForgeConstants.SIDED_PROXY_ANNOTATION, scope) ?: return@runSmart
+                val annotatedFields = AnnotatedElementsSearch.searchPsiFields(sidedProxy, scope).findAll()
+
+                var index = 0.0
+
+                for (field in annotatedFields) {
+                    if (service.isDumb || project.isDisposed) {
+                        return@runSmart
+                    }
+
+                    SidedProxyAnnotator.check(field)
+                    index++
+                }
+            }
         }
     }
 
