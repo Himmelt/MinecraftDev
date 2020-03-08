@@ -3,13 +3,15 @@
  *
  * https://minecraftdev.org
  *
- * Copyright (c) 2018 minecraft-dev
+ * Copyright (c) 2019 minecraft-dev
  *
  * MIT License
  */
 
 package com.demonwav.mcdev.platform.sponge
 
+import com.demonwav.mcdev.buildsystem.BuildDependency
+import com.demonwav.mcdev.buildsystem.BuildRepository
 import com.demonwav.mcdev.buildsystem.BuildSystem
 import com.demonwav.mcdev.buildsystem.gradle.GradleBuildSystem
 import com.demonwav.mcdev.platform.PlatformType
@@ -30,29 +32,40 @@ class SpongeProjectConfiguration : ProjectConfiguration() {
     val dependencies = mutableListOf<String>()
     var spongeApiVersion = ""
 
+    override var type = PlatformType.SPONGE
+
     init {
         type = PlatformType.SPONGE
     }
 
-    fun hasDependencies() = listContainsAtLeastOne(dependencies)
+    private fun hasDependencies() = listContainsAtLeastOne(dependencies)
     fun setDependencies(string: String) {
         dependencies.clear()
         dependencies.addAll(commaSplit(string))
     }
 
     override fun create(project: Project, buildSystem: BuildSystem, indicator: ProgressIndicator) {
+        if (project.isDisposed) {
+            return
+        }
+
+        val baseConfig = base ?: return
+        val dirs = buildSystem.directories ?: return
+
         runWriteTask {
             indicator.text = "Writing main class"
-            var file = buildSystem.sourceDirectory
-            val files = this.mainClass.split("\\.".toRegex()).dropLastWhile(String::isEmpty).toTypedArray()
+
+            var file = dirs.sourceDirectory
+            val files = baseConfig.mainClass.split(Regex("\\.")).dropLastWhile(String::isEmpty).toTypedArray()
             val className = files[files.size - 1]
-            val packageName = this.mainClass.substring(0, this.mainClass.length - className.length - 1)
+            val packageName = baseConfig.mainClass.substring(0, baseConfig.mainClass.length - className.length - 1)
             file = getMainClassDirectory(files, file)
 
-            val mainClassFile = file.findOrCreateChildData(this, className + ".java")
+            val mainClassFile = file.findOrCreateChildData(this, "$className.java")
             SpongeTemplate.applyMainClassTemplate(project, mainClassFile, packageName, className, hasDependencies())
 
-            val mainClassPsi = PsiManager.getInstance(project).findFile(mainClassFile) as PsiJavaFile? ?: return@runWriteTask
+            val mainClassPsi =
+                PsiManager.getInstance(project).findFile(mainClassFile) as PsiJavaFile? ?: return@runWriteTask
             val psiClass = mainClassPsi.classes[0]
 
             writeMainSpongeClass(
@@ -60,17 +73,37 @@ class SpongeProjectConfiguration : ProjectConfiguration() {
                 mainClassPsi,
                 psiClass,
                 buildSystem,
-                pluginName,
-                description,
-                website ?: "",
+                baseConfig.pluginName,
+                baseConfig.description ?: "",
+                baseConfig.website ?: "",
                 hasAuthors(),
-                authors,
+                baseConfig.authors,
                 hasDependencies(),
                 dependencies
             )
 
             EditorHelper.openInEditor(mainClassPsi)
         }
+    }
+
+    override fun setupDependencies(buildSystem: BuildSystem) {
+        buildSystem.repositories.add(BuildRepository(
+            "spongepowered-repo",
+            "https://repo.spongepowered.org/maven/"
+        ))
+        buildSystem.dependencies.add(BuildDependency(
+            "org.spongepowered",
+            "spongeapi",
+            spongeApiVersion,
+            mavenScope = "provided",
+            gradleConfiguration = "compileOnly"
+        ))
+        buildSystem.dependencies.add(BuildDependency(
+            "org.spongepowered",
+            "spongeapi",
+            spongeApiVersion,
+            gradleConfiguration = "annotationProcessor"
+        ))
     }
 }
 
@@ -108,7 +141,8 @@ fun writeMainSpongeClass(
     }
 
     if (hasDependencies) {
-        annotationString + ",\ndependencies = {\n${dependencies.joinToString(",\n") { "@Dependency(id = ${escape(it)})" }}\n}"
+        val dep = dependencies.joinToString(",\n") { "@Dependency(id = ${escape(it)})" }
+        annotationString + ",\ndependencies = {\n$dep\n}"
     }
 
     annotationString + "\n)"

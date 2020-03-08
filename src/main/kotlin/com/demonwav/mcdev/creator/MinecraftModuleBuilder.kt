@@ -3,7 +3,7 @@
  *
  * https://minecraftdev.org
  *
- * Copyright (c) 2018 minecraft-dev
+ * Copyright (c) 2019 minecraft-dev
  *
  * MIT License
  */
@@ -30,7 +30,9 @@ import com.intellij.openapi.startup.StartupManager
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
-import java.io.File
+import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.Paths
 
 class MinecraftModuleBuilder : JavaModuleBuilder() {
 
@@ -52,16 +54,18 @@ class MinecraftModuleBuilder : JavaModuleBuilder() {
             modifiableRootModel.sdk = moduleJdk
         }
 
-        creator.root = root
-        creator.module = modifiableRootModel.module
-
-        val r = DumbAwareRunnable(creator::create)
+        val r = DumbAwareRunnable {
+            creator.create(root, modifiableRootModel.module)
+        }
 
         if (project.isDisposed) {
             return
         }
 
-        if (ApplicationManager.getApplication().isUnitTestMode || ApplicationManager.getApplication().isHeadlessEnvironment) {
+        if (
+            ApplicationManager.getApplication().isUnitTestMode ||
+            ApplicationManager.getApplication().isHeadlessEnvironment
+        ) {
             r.run()
             return
         }
@@ -79,26 +83,33 @@ class MinecraftModuleBuilder : JavaModuleBuilder() {
 
         val path = FileUtil.toSystemIndependentName(temp)
 
-        File(path).mkdirs()
-        return LocalFileSystem.getInstance().refreshAndFindFileByPath(path)
+        return try {
+            Files.createDirectories(Paths.get(path))
+            LocalFileSystem.getInstance().refreshAndFindFileByPath(path)
+        } catch (e: IOException) {
+            null
+        }
     }
 
     override fun getModuleType(): ModuleType<*> = JavaModuleType.getModuleType()
     override fun getParentGroup() = MinecraftModuleType.NAME
 
-    override fun createWizardSteps(wizardContext: WizardContext, modulesProvider: ModulesProvider): Array<ModuleWizardStep> {
+    override fun createWizardSteps(
+        wizardContext: WizardContext,
+        modulesProvider: ModulesProvider
+    ): Array<ModuleWizardStep> {
         return arrayOf(
-            SpongeForgeChooser(creator),
             BuildSystemWizardStep(creator),
             BukkitProjectSettingsWizard(creator),
             SpongeProjectSettingsWizard(creator),
             ForgeProjectSettingsWizard(creator),
             LiteLoaderProjectSettingsWizard(creator),
-            BungeeCordProjectSettingsWizard(creator),
-            CanaryProjectSettingsWizard(creator)
+            BungeeCordProjectSettingsWizard(creator)
         )
     }
 
-    override fun getCustomOptionsStep(context: WizardContext?, parentDisposable: Disposable?) = ProjectChooserWizardStep(creator)
+    override fun getCustomOptionsStep(context: WizardContext?, parentDisposable: Disposable?) =
+        ProjectChooserWizardStep(creator)
+
     override fun validate(current: Project?, dest: Project?) = true
 }

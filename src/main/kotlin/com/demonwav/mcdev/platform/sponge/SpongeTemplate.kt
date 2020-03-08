@@ -3,7 +3,7 @@
  *
  * https://minecraftdev.org
  *
- * Copyright (c) 2018 minecraft-dev
+ * Copyright (c) 2019 minecraft-dev
  *
  * MIT License
  */
@@ -19,23 +19,22 @@ import java.util.Properties
 
 object SpongeTemplate {
 
-    fun applyPomTemplate(project: Project,
-                         version: String): String {
+    fun applyPomTemplate(project: Project): String {
 
         val properties = Properties()
-        properties.setProperty("BUILD_VERSION", version)
 
         val manager = FileTemplateManager.getInstance(project)
         val fileTemplate = manager.getJ2eeTemplate(MinecraftFileTemplateGroupFactory.SPONGE_POM_TEMPLATE)
         return fileTemplate.getText(properties)
     }
 
-    fun applyMainClassTemplate(project: Project,
-                               mainClassFile: VirtualFile,
-                               packageName: String,
-                               className: String,
-                               hasDependencies: Boolean) {
-
+    fun applyMainClassTemplate(
+        project: Project,
+        mainClassFile: VirtualFile,
+        packageName: String,
+        className: String,
+        hasDependencies: Boolean
+    ) {
         val properties = Properties()
 
         properties.setProperty("PACKAGE", packageName)
@@ -44,34 +43,35 @@ object SpongeTemplate {
             properties.setProperty("HAS_DEPENDENCIES", "true")
         }
 
-        BaseTemplate.applyTemplate(project, mainClassFile, MinecraftFileTemplateGroupFactory.SPONGE_MAIN_CLASS_TEMPLATE, properties)
+        BaseTemplate.applyTemplate(
+            project,
+            mainClassFile,
+            MinecraftFileTemplateGroupFactory.SPONGE_MAIN_CLASS_TEMPLATE,
+            properties
+        )
     }
 
-    fun applyBuildGradleTemplate(project: Project,
-                                 file: VirtualFile,
-                                 groupId: String,
-                                 artifactId: String,
-                                 pluginVersion: String,
-                                 buildVersion: String): String? {
-
+    fun applyBuildGradleTemplate(
+        project: Project,
+        file: VirtualFile,
+        groupId: String,
+        pluginVersion: String,
+        artifactId: String
+    ): String? {
         val properties = Properties()
-        // Only set build version if it is higher/lower than 1.8 (SpongeGradle automatically sets it to 1.8)
-        if (buildVersion != "1.8") {
-            properties.setProperty("BUILD_VERSION", buildVersion)
-        }
 
         val manager = FileTemplateManager.getInstance(project)
         val template = manager.getJ2eeTemplate(MinecraftFileTemplateGroupFactory.SPONGE_BUILD_GRADLE_TEMPLATE)
 
-        // Sponge \o/
-        BaseTemplate.applyGradlePropertiesTemplate(project, file, groupId, artifactId, pluginVersion, true)
+        BaseTemplate.applyGradlePropertiesTemplate(project, file, groupId, pluginVersion, artifactId)
 
         return template.getText(properties)
     }
 
-    fun applySubmoduleBuildGradleTemplate(project: Project,
-                                          commonProjectName: String): String? {
-
+    fun applySubmoduleBuildGradleTemplate(
+        project: Project,
+        commonProjectName: String
+    ): String? {
         val properties = Properties()
         properties.setProperty("COMMON_PROJECT_NAME", commonProjectName)
 

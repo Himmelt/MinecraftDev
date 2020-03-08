@@ -3,7 +3,7 @@
  *
  * https://minecraftdev.org
  *
- * Copyright (c) 2018 minecraft-dev
+ * Copyright (c) 2019 minecraft-dev
  *
  * MIT License
  */
@@ -17,9 +17,9 @@ import com.intellij.psi.PsiMember
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.util.containers.stream
-import org.jetbrains.annotations.Contract
 import java.io.Serializable
 import java.util.stream.Stream
+import org.jetbrains.annotations.Contract
 
 /**
  * Represents a reference to a class member (a method or a field). It may
@@ -41,24 +41,24 @@ data class MemberReference(
     val withoutOwner
         get() = if (this.owner == null) this else MemberReference(this.name, this.descriptor, null, this.matchAll)
 
-    @Contract(pure = true)
     fun matchOwner(psiClass: PsiClass): Boolean {
         return this.owner == null || this.owner == psiClass.fullQualifiedName
     }
 
-    @Contract(pure = true)
     fun match(method: PsiMethod, qualifier: PsiClass): Boolean {
-        return this.name == method.internalName && matchOwner(qualifier)
-                && (this.descriptor == null || this.descriptor == method.descriptor)
+        return this.name == method.internalName && matchOwner(qualifier) &&
+            (this.descriptor == null || this.descriptor == method.descriptor)
     }
 
-    @Contract(pure = true)
     fun match(field: PsiField, qualifier: PsiClass): Boolean {
-        return this.name == field.name && matchOwner(qualifier)
-                && (this.descriptor == null || this.descriptor == field.descriptor)
+        return this.name == field.name && matchOwner(qualifier) &&
+            (this.descriptor == null || this.descriptor == field.descriptor)
     }
 
-    fun resolve(project: Project, scope: GlobalSearchScope = GlobalSearchScope.allScope(project)): Pair<PsiClass, PsiMember>? {
+    fun resolve(
+        project: Project,
+        scope: GlobalSearchScope = GlobalSearchScope.allScope(project)
+    ): Pair<PsiClass, PsiMember>? {
         return resolve(project, scope, ::Pair)
     }
 
@@ -66,7 +66,6 @@ data class MemberReference(
         return resolve(project, scope) { _, member -> member }
     }
 
-    @Contract(pure = true)
     private inline fun <R> resolve(project: Project, scope: GlobalSearchScope, ret: (PsiClass, PsiMember) -> R): R? {
         if (this.owner == null) {
             throw IllegalStateException("Cannot resolve unqualified member reference (owner == null)")
@@ -84,12 +83,10 @@ data class MemberReference(
 
         return member?.let { ret(psiClass, member) }
     }
-
 }
 
 // Class
 
-@Contract(pure = true)
 fun PsiClass.findMethods(member: MemberReference, checkBases: Boolean = false): Stream<PsiMethod> {
     if (!member.matchOwner(this)) {
         return Stream.empty()
@@ -103,7 +100,6 @@ fun PsiClass.findMethods(member: MemberReference, checkBases: Boolean = false): 
     }
 }
 
-@Contract(pure = true)
 fun PsiClass.findField(member: MemberReference, checkBases: Boolean = false): PsiField? {
     if (!member.matchOwner(this)) {
         return null
@@ -127,14 +123,12 @@ val PsiMethod.memberReference
 val PsiMethod.qualifiedMemberReference
     get() = MemberReference(internalName, descriptor, containingClass!!.fullQualifiedName)
 
-@Contract(pure = true)
 fun PsiMethod.getQualifiedMemberReference(owner: PsiClass): MemberReference {
     return MemberReference(internalName, descriptor, owner.fullQualifiedName)
 }
 
 fun PsiMethod?.isSameReference(reference: PsiMethod?): Boolean =
     this != null && (this === reference || qualifiedMemberReference == reference?.qualifiedMemberReference)
-
 
 // Field
 @get:Contract(pure = true)
@@ -153,8 +147,6 @@ val PsiField.simpleQualifiedMemberReference
 val PsiField.qualifiedMemberReference
     get() = MemberReference(name, descriptor, containingClass!!.fullQualifiedName)
 
-@Contract(pure = true)
 fun PsiField.getQualifiedMemberReference(owner: PsiClass): MemberReference {
     return MemberReference(name, descriptor, owner.fullQualifiedName)
 }
-

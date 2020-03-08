@@ -3,7 +3,7 @@
  *
  * https://minecraftdev.org
  *
- * Copyright (c) 2018 minecraft-dev
+ * Copyright (c) 2019 minecraft-dev
  *
  * MIT License
  */
@@ -22,57 +22,56 @@ import java.util.Properties
 
 object BaseTemplate {
 
-    private val NEW_LINE = "\\n+".toRegex()
+    private val NEW_LINE = Regex("\\n+")
 
-    fun applyBuildGradleTemplate(project: Project,
-                                 file: VirtualFile,
-                                 groupId: String,
-                                 artifactId: String,
-                                 pluginVersion: String,
-                                 buildVersion: String): String? {
-
-        val buildGradleProps = Properties()
-        buildGradleProps.setProperty("BUILD_VERSION", buildVersion)
-
+    fun applyBuildGradleTemplate(
+        project: Project,
+        file: VirtualFile,
+        groupId: String,
+        pluginVersion: String
+    ): String? {
         val manager = FileTemplateManager.getInstance(project)
         val template = manager.getJ2eeTemplate(MinecraftFileTemplateGroupFactory.BUILD_GRADLE_TEMPLATE)
 
-        // This method should be never used for Sponge projects so we just pass false
-        applyGradlePropertiesTemplate(project, file, groupId, artifactId, pluginVersion, false)
+        applyGradlePropertiesTemplate(project, file, groupId, pluginVersion)
 
-        return template.getText(buildGradleProps)
+        return template.getText(manager.defaultProperties)
     }
 
-    fun applyMultiModuleBuildGradleTemplate(project: Project,
-                                            file: VirtualFile,
-                                            prop: VirtualFile,
-                                            groupId: String,
-                                            artifactId: String,
-                                            pluginVersion: String,
-                                            buildVersion: String,
-                                            configurations:  Map<PlatformType, ProjectConfiguration>) {
-
+    fun applyMultiModuleBuildGradleTemplate(
+        project: Project,
+        file: VirtualFile,
+        prop: VirtualFile,
+        groupId: String,
+        pluginVersion: String,
+        artifactId: String? = null
+    ) {
         val properties = Properties()
-        properties.setProperty("BUILD_VERSION", buildVersion)
 
-        applyGradlePropertiesTemplate(project, prop, groupId, artifactId, pluginVersion, configurations.containsKey(PlatformType.SPONGE))
+        applyGradlePropertiesTemplate(
+            project,
+            prop,
+            groupId,
+            pluginVersion,
+            artifactId
+        )
 
         applyTemplate(project, file, MinecraftFileTemplateGroupFactory.MULTI_MODULE_BUILD_GRADLE_TEMPLATE, properties)
     }
 
-    fun applyGradlePropertiesTemplate(project: Project,
-                                      file: VirtualFile,
-                                      groupId: String,
-                                      artifactId: String,
-                                      pluginVersion: String,
-                                      hasSponge: Boolean) {
-
+    fun applyGradlePropertiesTemplate(
+        project: Project,
+        file: VirtualFile,
+        groupId: String,
+        pluginVersion: String,
+        artifactId: String? = null
+    ) {
         val gradleProps = Properties()
 
         gradleProps.setProperty("GROUP_ID", groupId)
         gradleProps.setProperty("PLUGIN_VERSION", pluginVersion)
 
-        if (hasSponge) {
+        if (!artifactId.isNullOrBlank()) {
             gradleProps.setProperty("PLUGIN_ID", artifactId.toLowerCase(Locale.ENGLISH))
         }
 
@@ -80,11 +79,12 @@ object BaseTemplate {
         applyTemplate(project, file, MinecraftFileTemplateGroupFactory.GRADLE_PROPERTIES_TEMPLATE, gradleProps)
     }
 
-    fun applySettingsGradleTemplate(project: Project,
-                                    file: VirtualFile,
-                                    projectName: String,
-                                    includes: String) {
-
+    fun applySettingsGradleTemplate(
+        project: Project,
+        file: VirtualFile,
+        projectName: String,
+        includes: String
+    ) {
         val properties = Properties()
         properties.setProperty("PROJECT_NAME", projectName)
         properties.setProperty("INCLUDES", includes)
@@ -92,9 +92,10 @@ object BaseTemplate {
         applyTemplate(project, file, MinecraftFileTemplateGroupFactory.SETTINGS_GRADLE_TEMPLATE, properties)
     }
 
-    fun applySubmoduleBuildGradleTemplate(project: Project,
-                                          commonProjectName: String): String? {
-
+    fun applySubmoduleBuildGradleTemplate(
+        project: Project,
+        commonProjectName: String
+    ): String? {
         val properties = Properties()
         properties.setProperty("COMMON_PROJECT_NAME", commonProjectName)
 
@@ -104,13 +105,18 @@ object BaseTemplate {
         return template.getText(properties)
     }
 
-    fun applyTemplate(project: Project, file: VirtualFile, templateName: String, properties: Properties, trimNewlines: Boolean = false) {
-
+    fun applyTemplate(
+        project: Project,
+        file: VirtualFile,
+        templateName: String,
+        properties: Properties? = null,
+        trimNewlines: Boolean = false
+    ) {
         val manager = FileTemplateManager.getInstance(project)
         val template = manager.getJ2eeTemplate(templateName)
 
         val allProperties = manager.defaultProperties
-        allProperties.putAll(properties)
+        properties?.let { prop -> allProperties.putAll(prop) }
 
         var text = template.getText(allProperties)
         if (trimNewlines) {

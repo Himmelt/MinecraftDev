@@ -3,36 +3,33 @@
  *
  * https://minecraftdev.org
  *
- * Copyright (c) 2018 minecraft-dev
+ * Copyright (c) 2019 minecraft-dev
  *
  * MIT License
  */
 
 package com.demonwav.mcdev.i18n
 
-import com.demonwav.mcdev.framework.BaseMinecraftTest
+import com.demonwav.mcdev.framework.CommenterTest
+import com.demonwav.mcdev.framework.EdtInterceptor
+import com.demonwav.mcdev.framework.ProjectBuilder
 import com.demonwav.mcdev.platform.PlatformType
-import com.intellij.openapi.actionSystem.IdeActions
 import org.intellij.lang.annotations.Language
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.ExtendWith
 
-class I18nCommenterTest : BaseMinecraftTest(PlatformType.MCP) {
-    private val fileName: String
-        get() = getTestName(true)
+@ExtendWith(EdtInterceptor::class)
+@DisplayName("I18n Commenter Tests")
+class I18nCommenterTest : CommenterTest(PlatformType.MCP) {
 
-    // Dirty hack :(
-    override fun getTestDataPath() = project.basePath!!
-
-    private fun doTest(actionId: String, @Language("I18n") before: String, @Language("I18n") after: String) {
-        buildProject {
-            i18n("$fileName.lang", before, configure = true)
-            i18n("${fileName}_after.lang", after, configure = false)
-        }
-
-        myFixture.performEditorAction(actionId)
-        myFixture.checkResultByFile("${fileName}_after.lang", true)
+    private fun doTest(@Language("I18n") before: String, @Language("I18n") after: String) {
+        doTest(before, after, ".lang", ProjectBuilder::i18n)
     }
 
-    fun testSingleLineComment() = doTest(IdeActions.ACTION_COMMENT_LINE, """
+    @Test
+    @DisplayName("Single Line Comment Test")
+    fun singleLineCommentTest() = doTest("""
         test.<caret>key1=value1
         test.key2=value2
     """, """
@@ -40,7 +37,9 @@ class I18nCommenterTest : BaseMinecraftTest(PlatformType.MCP) {
         test.k<caret>ey2=value2
     """)
 
-    fun testMultiLineComment() = doTest(IdeActions.ACTION_COMMENT_LINE, """
+    @Test
+    @DisplayName("Multi Line Comment Test")
+    fun multiLineCommentTest() = doTest("""
         test.key1=value1
         test.<selection>key2=value2
         test</selection>.key3=value3
@@ -52,7 +51,9 @@ class I18nCommenterTest : BaseMinecraftTest(PlatformType.MCP) {
         test.key4=value4
     """)
 
-    fun testSingleLineUncomment() = doTest(IdeActions.ACTION_COMMENT_LINE, """
+    @Test
+    @DisplayName("Single Line Uncomment Test")
+    fun singleLineUncommentTest() = doTest("""
         test.key1=value1
         test.key2=value2
         #test<caret>.key3=value3
@@ -64,7 +65,9 @@ class I18nCommenterTest : BaseMinecraftTest(PlatformType.MCP) {
         #tes<caret>t.key4=value4
     """)
 
-    fun testMultiLineUncomment() = doTest(IdeActions.ACTION_COMMENT_LINE, """
+    @Test
+    @DisplayName("Multi Line Uncomment Test")
+    fun multiLineUncommentTest() = doTest("""
         #test.<selection>key1=value1
         #test.key2=</selection>value2
         #test.key3=value3

@@ -3,7 +3,7 @@
  *
  * https://minecraftdev.org
  *
- * Copyright (c) 2018 minecraft-dev
+ * Copyright (c) 2019 minecraft-dev
  *
  * MIT License
  */
@@ -17,8 +17,8 @@ import com.intellij.psi.codeStyle.CodeStyleSettings
 import com.intellij.psi.codeStyle.CodeStyleSettingsProvider
 
 class NbttCodeStyleSettingsProvider : CodeStyleSettingsProvider() {
-    override fun createSettingsPage(settings: CodeStyleSettings, originalSettings: CodeStyleSettings) =
-        object : CodeStyleAbstractConfigurable(settings, originalSettings, configurableDisplayName) {
+    override fun createConfigurable(settings: CodeStyleSettings, modelSettings: CodeStyleSettings) =
+        object : CodeStyleAbstractConfigurable(settings, modelSettings, configurableDisplayName) {
             override fun createPanel(settings: CodeStyleSettings) = NbttCodeStyleMainPanel(currentSettings, settings)
             override fun getHelpTopic(): String? = null
         }
@@ -37,4 +37,3 @@ class NbttCodeStyleSettingsProvider : CodeStyleSettingsProvider() {
         }
     }
 }
-

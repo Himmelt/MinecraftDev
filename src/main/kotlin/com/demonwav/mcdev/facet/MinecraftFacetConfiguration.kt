@@ -3,7 +3,7 @@
  *
  * https://minecraftdev.org
  *
- * Copyright (c) 2018 minecraft-dev
+ * Copyright (c) 2019 minecraft-dev
  *
  * MIT License
  */
@@ -17,7 +17,6 @@ import com.intellij.facet.ui.FacetValidatorsManager
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.util.xmlb.annotations.Tag
 import com.intellij.util.xmlb.annotations.XCollection
-import org.jdom.Element
 
 class MinecraftFacetConfiguration : FacetConfiguration, PersistentStateComponent<MinecraftFacetConfigurationData> {
 
@@ -31,9 +30,6 @@ class MinecraftFacetConfiguration : FacetConfiguration, PersistentStateComponent
     override fun loadState(state: MinecraftFacetConfigurationData) {
         this.state = state
     }
-
-    @Suppress("OverridingDeprecatedMember") override fun readExternal(element: Element?) {}
-    @Suppress("OverridingDeprecatedMember") override fun writeExternal(element: Element?) {}
 }
 
 data class MinecraftFacetConfigurationData(

@@ -3,7 +3,7 @@
  *
  * https://minecraftdev.org
  *
- * Copyright (c) 2018 minecraft-dev
+ * Copyright (c) 2019 minecraft-dev
  *
  * MIT License
  */
@@ -36,3 +36,7 @@ val VirtualFile.mcDomain: String?
 
 operator fun Manifest.get(attribute: String): String? = mainAttributes.getValue(attribute)
 operator fun Manifest.get(attribute: Attributes.Name): String? = mainAttributes.getValue(attribute)
+
+fun VirtualFile.refreshFs(): VirtualFile {
+    return this.parent.findOrCreateChildData(this, this.name)
+}

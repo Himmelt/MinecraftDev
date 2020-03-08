@@ -3,7 +3,7 @@
  *
  * https://minecraftdev.org
  *
- * Copyright (c) 2018 minecraft-dev
+ * Copyright (c) 2019 minecraft-dev
  *
  * MIT License
  */
@@ -14,10 +14,11 @@ import com.demonwav.mcdev.nbt.editor.CompressionSelection
 import com.demonwav.mcdev.nbt.editor.NbtToolbar
 import com.demonwav.mcdev.nbt.lang.NbttFile
 import com.demonwav.mcdev.nbt.lang.NbttLanguage
-import com.demonwav.mcdev.util.invokeLaterAny
+import com.demonwav.mcdev.util.invokeAndWait
 import com.demonwav.mcdev.util.runWriteAction
 import com.intellij.notification.Notification
 import com.intellij.notification.NotificationType
+import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
@@ -46,7 +47,7 @@ class NbtVirtualFile(private val backingFile: VirtualFile, private val project: 
         var tempCompressed: Boolean
         var tempParseSuccessful: Boolean
         try {
-            val (rootCompound, isCompressed) = Nbt.buildTagTree(backingFile.inputStream, TimeUnit.SECONDS.toMillis(1))
+            val (rootCompound, isCompressed) = Nbt.buildTagTree(backingFile.inputStream, TimeUnit.SECONDS.toMillis(10))
             text = rootCompound.toString()
             tempCompressed = isCompressed
             tempParseSuccessful = true
@@ -60,8 +61,10 @@ class NbtVirtualFile(private val backingFile: VirtualFile, private val project: 
         this.parseSuccessful = tempParseSuccessful
 
         if (this.parseSuccessful) {
-            val psiFile = PsiFileFactory.getInstance(project).createFileFromText(NbttLanguage, text)
-            invokeLaterAny {
+            val psiFile = runReadAction {
+                PsiFileFactory.getInstance(project).createFileFromText(NbttLanguage, text)
+            }
+            invokeAndWait {
                 psiFile.runWriteAction {
                     this.bytes = PsiDocumentManager.getInstance(project).getDocument(
                         CodeStyleManager.getInstance(project).reformat(psiFile, true) as PsiFile
@@ -83,7 +86,9 @@ class NbtVirtualFile(private val backingFile: VirtualFile, private val project: 
     override fun isDirectory() = false
     override fun getTimeStamp() = backingFile.timeStamp
     override fun getModificationStamp() = 0L
-    override fun getName() = backingFile.name + (if (parseSuccessful) ".nbtt" else ".txt") // don't highlight syntax on bad files
+    override fun getName() =
+        backingFile.name + (if (parseSuccessful) ".nbtt" else ".txt") // don't highlight syntax on bad files
+
     override fun contentsToByteArray() = bytes
     override fun isValid() = backingFile.isValid
     override fun getInputStream() = ByteArrayInputStream(bytes)
@@ -107,8 +112,9 @@ class NbtVirtualFile(private val backingFile: VirtualFile, private val project: 
             return
         }
 
-        this.bytes = PsiDocumentManager.getInstance(project).getDocument(nbttFile)?.immutableCharSequence?.toString()?.toByteArray()
-            ?: byteArrayOf()
+        this.bytes =
+            PsiDocumentManager.getInstance(project).getDocument(nbttFile)
+                ?.immutableCharSequence?.toString()?.toByteArray() ?: byteArrayOf()
 
         // just to be safe
         this.parent.bom = null

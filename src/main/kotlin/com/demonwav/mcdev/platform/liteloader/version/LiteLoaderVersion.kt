@@ -3,7 +3,7 @@
  *
  * https://minecraftdev.org
  *
- * Copyright (c) 2018 minecraft-dev
+ * Copyright (c) 2019 minecraft-dev
  *
  * MIT License
  */
@@ -11,8 +11,8 @@
 package com.demonwav.mcdev.platform.liteloader.version
 
 import com.demonwav.mcdev.util.fromJson
-import com.demonwav.mcdev.util.gson
 import com.demonwav.mcdev.util.sortVersions
+import com.google.gson.Gson
 import java.io.IOException
 import java.net.URL
 
@@ -20,7 +20,9 @@ class LiteLoaderVersion private constructor(private var map: Map<*, *>) {
 
     val sortedMcVersions: List<String> by lazy {
         val mcVersion = map["versions"] as Map<*, *>
-        sortVersions(mcVersion.keys)
+        @Suppress("UNCHECKED_CAST")
+        val keys = mcVersion.keys as Collection<String>
+        return@lazy sortVersions(keys)
     }
 
     companion object {
@@ -28,7 +30,7 @@ class LiteLoaderVersion private constructor(private var map: Map<*, *>) {
             try {
                 val text = URL("http://dl.liteloader.com/versions/versions.json").readText()
 
-                val map = gson.fromJson<Map<*, *>>(text)
+                val map = Gson().fromJson<Map<*, *>>(text)
                 val liteLoaderVersion = LiteLoaderVersion(map)
                 liteLoaderVersion.sortedMcVersions
                 return liteLoaderVersion

@@ -3,7 +3,7 @@
  *
  * https://minecraftdev.org
  *
- * Copyright (c) 2018 minecraft-dev
+ * Copyright (c) 2019 minecraft-dev
  *
  * MIT License
  */
@@ -20,11 +20,11 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
-import org.apache.commons.lang.builder.ToStringBuilder
-import org.jetbrains.annotations.Contract
 import java.awt.Color
 import java.util.LinkedHashMap
 import javax.swing.Icon
+import org.apache.commons.lang.builder.ToStringBuilder
+import org.jetbrains.annotations.Contract
 
 abstract class AbstractModuleType<out T : AbstractModule>(val groupId: String, val artifactId: String) {
 
@@ -48,13 +48,16 @@ abstract class AbstractModuleType<out T : AbstractModule>(val groupId: String, v
     abstract fun generateModule(facet: MinecraftFacet): T
 
     fun performCreationSettingSetup(project: Project) {
-        val annotations = (EntryPointsManager.getInstance(project) as EntryPointsManagerBase).ADDITIONAL_ANNOTATIONS
+        if (project.isDisposed) {
+            return
+        }
+        val manager = EntryPointsManager.getInstance(project)
+        val annotations = (manager as? EntryPointsManagerBase)?.ADDITIONAL_ANNOTATIONS as? MutableList<String> ?: return
         ignoredAnnotations.asSequence()
             .filter { annotation -> !annotations.contains(annotation) }
             .forEach { annotations.add(it) }
     }
 
-    @Contract(pure = true)
     open fun getEventGenerationPanel(chosenClass: PsiClass): EventGenerationPanel {
         return EventGenerationPanel(chosenClass)
     }
@@ -63,7 +66,6 @@ abstract class AbstractModuleType<out T : AbstractModule>(val groupId: String, v
     open val isEventGenAvailable: Boolean
         get() = false
 
-    @Contract(pure = true)
     open fun getDefaultListenerName(psiClass: PsiClass) = "on" + psiClass.name!!.replace("Event", "")
 
     override fun toString(): String {

@@ -3,7 +3,7 @@
  *
  * https://minecraftdev.org
  *
- * Copyright (c) 2018 minecraft-dev
+ * Copyright (c) 2019 minecraft-dev
  *
  * MIT License
  */
@@ -33,8 +33,6 @@ import com.intellij.ide.util.MemberChooser
 import com.intellij.lang.java.JavaLanguage
 import com.intellij.openapi.application.runWriteAction
 import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.extensions.ExtensionPointName
-import com.intellij.openapi.extensions.Extensions
 import com.intellij.openapi.project.Project
 import com.intellij.psi.CommonClassNames
 import com.intellij.psi.JavaPsiFacade
@@ -105,7 +103,11 @@ fun insertShadows(psiClass: PsiClass, shadows: List<GenerationInfo>) {
     GenerateMembersUtil.insertMembersBeforeAnchor(psiClass, anchor, shadows)
 }
 
-fun createShadowMembers(project: Project, psiClass: PsiClass, members: Stream<PsiMember>): List<PsiGenerationInfo<PsiMember>> {
+fun createShadowMembers(
+    project: Project,
+    psiClass: PsiClass,
+    members: Stream<PsiMember>
+): List<PsiGenerationInfo<PsiMember>> {
     var methodAdded = false
 
     val result = members.map { m ->

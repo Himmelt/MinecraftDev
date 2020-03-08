@@ -3,14 +3,16 @@
  *
  * https://minecraftdev.org
  *
- * Copyright (c) 2018 minecraft-dev
+ * Copyright (c) 2019 minecraft-dev
  *
  * MIT License
  */
 
 package com.demonwav.mcdev.nbt
 
-class MalformedNbtFileException : Exception {
+open class MalformedNbtFileException : Exception {
     constructor(message: String) : super(message)
     constructor(message: String, cause: Throwable) : super(message, cause)
 }
+
+class NbtFileParseTimeoutException(message: String) : MalformedNbtFileException(message)

@@ -3,7 +3,7 @@
  *
  * https://minecraftdev.org
  *
- * Copyright (c) 2018 minecraft-dev
+ * Copyright (c) 2019 minecraft-dev
  *
  * MIT License
  */
@@ -23,8 +23,8 @@ object SpongeModuleType : AbstractModuleType<SpongeModule>("org.spongepowered", 
 
     private const val ID = "SPONGE_MODULE_TYPE"
 
-    val IGNORED_ANNOTATIONS = listOf(SpongeConstants.LISTENER_ANNOTATION, SpongeConstants.PLUGIN_ANNOTATION)
-    val LISTENER_ANNOTATIONS = listOf(SpongeConstants.LISTENER_ANNOTATION)
+    private val IGNORED_ANNOTATIONS = listOf(SpongeConstants.LISTENER_ANNOTATION, SpongeConstants.PLUGIN_ANNOTATION)
+    private val LISTENER_ANNOTATIONS = listOf(SpongeConstants.LISTENER_ANNOTATION)
 
     init {
         CommonColors.applyStandardColors(colorMap, SpongeConstants.TEXT_COLORS)
