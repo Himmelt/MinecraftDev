@@ -28,6 +28,7 @@ object SpongeModuleType : AbstractModuleType<SpongeModule>("org.spongepowered", 
 
     init {
         CommonColors.applyStandardColors(colorMap, SpongeConstants.TEXT_COLORS)
+        CommonColors.applyStandardColors(colorMap, SpongeConstants.VIOLET_COLORS)
     }
 
     override val platformType = PlatformType.SPONGE

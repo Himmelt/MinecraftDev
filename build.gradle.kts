@@ -16,6 +16,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 buildscript {
     repositories {
+        maven("https://maven.aliyun.com/repository/public")
         maven("https://dl.bintray.com/jetbrains/intellij-plugin-service")
     }
 }
@@ -72,7 +73,7 @@ val gradleToolingExtensionJar = tasks.register<Jar>(gradleToolingExtensionSource
 }
 
 repositories {
-    mavenCentral()
+    maven("https://maven.aliyun.com/repository/public")
     maven("https://dl.bintray.com/minecraft-dev/maven")
     maven("https://repo.spongepowered.org/maven")
     maven("https://jetbrains.bintray.com/intellij-third-party-dependencies")

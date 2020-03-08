@@ -27,6 +27,7 @@ object SpigotModuleType : AbstractModuleType<BukkitModule<SpigotModuleType>>("or
     init {
         CommonColors.applyStandardColors(colorMap, BukkitConstants.CHAT_COLOR_CLASS)
         CommonColors.applyStandardColors(colorMap, BungeeCordConstants.CHAT_COLOR_CLASS)
+        CommonColors.applyStandardColors(colorMap, BukkitConstants.VIOLET_COLORS)
     }
 
     override val platformType = PlatformType.SPIGOT

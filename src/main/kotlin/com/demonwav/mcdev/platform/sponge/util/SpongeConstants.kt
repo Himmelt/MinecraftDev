@@ -15,6 +15,7 @@ object SpongeConstants {
     const val PLUGIN_ANNOTATION = "org.spongepowered.api.plugin.Plugin"
     const val DEPENDENCY_ANNOTATION = "org.spongepowered.api.plugin.Dependency"
     const val TEXT_COLORS = "org.spongepowered.api.text.format.TextColors"
+    const val VIOLET_COLORS = "org.soraworld.violet.util.ChatColor"
     const val EVENT = "org.spongepowered.api.event.Event"
     const val LISTENER_ANNOTATION = "org.spongepowered.api.event.Listener"
     const val GETTER_ANNOTATION = "org.spongepowered.api.event.filter.Getter"

@@ -4,6 +4,7 @@
 
 ## Directory-based project format:
 .idea/
+lib/
 
 ## File-based project format:
 *.ipr
